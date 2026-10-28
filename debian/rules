@@ -1,0 +1,44 @@
+#!/usr/bin/make -f
+include /usr/share/dpkg/architecture.mk
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all reproducible=+fixfilepath
+export CARGO_TARGET_DIR = $(CURDIR)/.alpha-build/cargo
+export RUSTFLAGS = --remap-path-prefix=$(CURDIR)=. -C link-arg=-Wl,-z,relro -C link-arg=-Wl,-z,now
+export QT_QPA_PLATFORM = offscreen
+export QT_QPA_PLATFORMTHEME = generic
+export TMPDIR = $(CURDIR)/.alpha-build/tmp
+
+%:
+	dh $@ --buildsystem=cmake --sourcedirectory=gui --builddirectory=.alpha-build/gui
+
+override_dh_auto_configure:
+	mkdir -p .alpha-build/tmp .alpha-build/bin
+	cmake -S gui -B .alpha-build/gui -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr -DCMAKE_INSTALL_LIBDIR=lib/$(DEB_HOST_MULTIARCH) -DCMAKE_RUNTIME_OUTPUT_DIRECTORY=$(CURDIR)/.alpha-build/bin -DG2C_REQUIRE_ALL_BACKENDS=ON -DBUILD_TESTING=ON
+
+override_dh_auto_build:
+	cargo build --frozen --release
+	install -m 755 .alpha-build/cargo/release/gpt2codex .alpha-build/bin/gpt2codex
+	cmake --build .alpha-build/gui --parallel 2
+
+override_dh_auto_test:
+ifeq (,$(filter nocheck,$(DEB_BUILD_OPTIONS)))
+	cargo test --frozen --all-targets
+	ctest --test-dir .alpha-build/gui --output-on-failure
+	python3 ./gpt2codex-alpha.py self-test --cli .alpha-build/bin/gpt2codex --gui .alpha-build/bin/gpt2codex-gui
+endif
+
+override_dh_auto_install:
+	DESTDIR=$(CURDIR)/debian/gpt2codex cmake --install .alpha-build/gui
+	install -D -m 755 .alpha-build/cargo/release/gpt2codex debian/gpt2codex/usr/bin/gpt2codex
+	install -D -m 644 debian/gpt2codex.desktop debian/gpt2codex/usr/share/applications/gpt2codex.desktop
+	install -D -m 644 gui/README.md debian/gpt2codex/usr/share/doc/gpt2codex/gui/README.md
+	python3 ./gpt2codex-alpha.py licenses --destination debian/gpt2codex/usr/share/doc/gpt2codex/cargo-licenses
+
+override_dh_strip:
+	dh_strip --no-automatic-dbgsym
+
+override_dh_dwz:
+	# No separate debug package is produced; avoid orphaned multifile debug data.
+	:
+
+override_dh_auto_clean:
+	dh_auto_clean

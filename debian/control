@@ -1,0 +1,22 @@
+Source: gpt2codex
+Section: devel
+Priority: optional
+Maintainer: Pitriss <5106460+Pitriss@users.noreply.github.com>
+Build-Depends: debhelper-compat (= 13), cmake (>= 3.25), g++, cargo (>= 1.85), rustc (>= 1.85), python3, qt6-base-dev (>= 6.8), libqtermwidget-dev (>= 2.1), libutf8proc-dev, libkf6parts-dev (>= 6.13), libkf6coreaddons-dev (>= 6.13), konsole-kpart (>= 4:25.04), screen
+Standards-Version: 4.7.2
+Rules-Requires-Root: no
+Homepage: https://github.com/Pitriss/gpt2codex
+
+Package: gpt2codex
+Architecture: amd64 arm64 armhf
+Depends: ${shlibs:Depends}, ${misc:Depends}, git, screen
+Recommends: konsole-kpart (>= 4:25.04), qt6-svg-plugins, breeze-icon-theme
+Suggests: tmux
+Description: local Codex bridge and Qt6 persistent terminal views (alpha)
+ Local Rust CLI and Qt6 GUI for explicitly registered projects, with
+ Konsole KPart and QTermWidget terminal modules. GNU screen is the default
+ multiplexer; tmux is optional. Codex must be supplied separately.
+ .
+ Installation does not start Codex, create or recover sessions, configure
+ projects, or install an init service. Debian 13 and Devuan Excalibur use
+ the same architecture-specific package.

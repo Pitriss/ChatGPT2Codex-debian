@@ -1,0 +1,161 @@
+name: Alpha Debian packages
+
+'on':
+  push:
+    branches: ['**']
+    tags: [v0.1.0-alpha1]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Debian 13 / ${{ matrix.arch }}${{ matrix.experimental && ' (experimental)' || '' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    continue-on-error: ${{ matrix.experimental }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {arch: amd64, platform: linux/amd64, experimental: false}
+          - {arch: arm64, platform: linux/arm64, experimental: true}
+          - {arch: armhf, platform: linux/arm/v7, experimental: true}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+        with:
+          persist-credentials: false
+      - name: Initialize explicit failure report and read reviewed image pins
+        id: pins
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: |
+          mkdir -p out
+          python3 - <<'PY'
+          import json,os,pathlib
+          arch=os.environ['ARCH']
+          pathlib.Path('out/result-'+arch+'.json').write_text(json.dumps({'architecture':arch,'status':'FAIL','backends':{'konsole':'not verified','qtermwidget':'not verified'},'reason':'Build/infrastructure did not complete; see build log. No package approved.'}))
+          lock=json.load(open('packaging/ci-lock.json'))
+          with open(os.environ['GITHUB_OUTPUT'],'a') as out:
+              out.write('debian='+lock['images']['debian']['image']+'\n')
+              out.write('binfmt='+lock['images']['binfmt']['image']+'\n')
+          PY
+      - name: Register pinned ARM emulators
+        if: matrix.experimental
+        uses: docker/setup-qemu-action@29109295f81e9208d7d86ff1c6c12d2833863392  # v3.6.0
+        with:
+          image: ${{ steps.pins.outputs.binfmt }}
+          platforms: arm,arm64
+      - name: Build and test complete package inside Debian 13
+        env:
+          IMAGE: ${{ steps.pins.outputs.debian }}
+          PLATFORM: ${{ matrix.platform }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          set -o pipefail
+          docker run --rm --platform "$PLATFORM" -e G2C_ALPHA_CONTAINER=1 -e G2C_EXPECT_ARCH="$ARCH" -v "$PWD:/src:ro" -v "$PWD/out:/out" "$IMAGE" /bin/sh /src/gpt2codex-alpha-container.sh build 2>&1 | tee out/build.log
+      - name: Report actual architecture/backend result
+        if: always()
+        run: |
+          if test -f out/result-${{ matrix.arch }}.json; then cat out/result-${{ matrix.arch }}.json >> "$GITHUB_STEP_SUMMARY"; fi
+      - name: Retain evidence, and only validated packages
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: alpha-build-${{ matrix.arch }}
+          path: out/
+          if-no-files-found: error
+
+  compatibility:
+    name: Same amd64 package / ${{ matrix.distribution }}
+    needs: build
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        distribution: [debian, devuan]
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4.3.0
+        with:
+          name: alpha-build-amd64
+          path: input
+      - name: Resolve reviewed runtime image
+        id: pin
+        env:
+          DISTRIBUTION: ${{ matrix.distribution }}
+        run: |
+          python3 - <<'PY'
+          import json,os
+          lock=json.load(open('packaging/ci-lock.json'))
+          with open(os.environ['GITHUB_OUTPUT'],'a') as out:
+              out.write('image='+lock['images'][os.environ['DISTRIBUTION']]['image']+'\n')
+          PY
+      - name: Install, probe and remove in a clean runtime container
+        env:
+          IMAGE: ${{ steps.pin.outputs.image }}
+          DISTRIBUTION: ${{ matrix.distribution }}
+        run: |
+          set -o pipefail
+          mkdir -p smoke
+          test -f input/validated/gpt2codex_0.1.0~alpha1_amd64.deb
+          docker run --rm --platform linux/amd64 -e G2C_ALPHA_CONTAINER=1 -v "$PWD:/src:ro" -v "$PWD/input/validated:/input:ro" -v "$PWD/smoke:/out" "$IMAGE" /bin/sh /src/gpt2codex-alpha-container.sh smoke "$DISTRIBUTION" 2>&1 | tee smoke/install.log
+      - name: Keep install evidence even when the smoke test fails
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: alpha-smoke-${{ matrix.distribution }}
+          path: smoke/
+          if-no-files-found: warn
+
+  release-inputs:
+    name: Validate packages, compatibility receipts and checksums
+    needs: [build, compatibility]
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4.3.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4.3.0
+        with:
+          pattern: alpha-*
+          path: artifacts
+      - name: Refuse missing amd64 or clean installation results
+        run: |
+          mkdir -p .tmp .log
+          python3 ./gpt2codex-alpha.py release-index --artifacts artifacts --destination release-inputs
+          cat release-inputs/ARCHITECTURES.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        with:
+          name: alpha-release-inputs
+          path: release-inputs/
+          if-no-files-found: error
+
+  publish:
+    name: Separately approved alpha pre-release
+    needs: release-inputs
+    if: github.ref == 'refs/tags/v0.1.0-alpha1' && vars.ALPHA_PUBLISH_ENABLED == 'true'
+    environment: alpha-release
+    permissions:
+      contents: write
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4.3.0
+        with:
+          name: alpha-release-inputs
+          path: release-inputs
+      - name: Verify assets and create pre-release for the existing approved tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          cd release-inputs
+          sha256sum --check SHA256SUMS
+          gh release create "$GITHUB_REF_NAME" ./*.deb SHA256SUMS ARCHITECTURES.md --verify-tag --prerelease --title 'gpt2codex 0.1.0 alpha 1' --notes-file ARCHITECTURES.md

@@ -1,0 +1,12 @@
+# Copy to ~/.config/chatgpt2codex/config.toml and edit the absolute path.
+# The adjacent projects/ directory contains separate <project_id>.toml files.
+[workspace]
+project_dir = "/absolute/path/to/mycode"
+rules_dir = ".ai"
+global_context_files = ["CODEX_GLOBAL.md", "BOOTSTRAP.md", "PROJECT_DEFAULTS.md"]
+
+[codex]
+name = "Kóďa"
+
+[sessions]
+name_template = "{project_id} | {codex_name} | {task}"

@@ -1,0 +1,22 @@
+.TH GPT2CODEX-GUI 1 "October 2026" "0.1.0~alpha1"
+.SH NAME
+gpt2codex-gui \- Qt6 views of registered persistent terminal sessions
+.SH SYNOPSIS
+.B gpt2codex-gui
+.RI [ --bridge-cli " /absolute/gpt2codex" ]
+.RI [ --config " /absolute/config.toml" ]
+.SH DESCRIPTION
+Provides Konsole KPart and QTermWidget terminal views independently of the
+session multiplexer. It only attaches verified existing sessions; it never
+starts or automatically restarts Codex.
+.SH SAFE PROBES
+--self-test performs read-only validation without attaching terminals.
+--backend-probe reports which installed modules are usable.
+--settings-probe reports GUI preferences. Probes still need a Qt platform;
+use QT_QPA_PLATFORM=offscreen for headless verification.
+.SH PROJECT ICONS
+A regular .icon.png in a registered root supplies its tab icon.
+Symlinks, images larger than 1 MiB or 1024 by 1024 pixels, and unusable PNGs
+fall back to theme icons. The tooltip shows the root and actual multiplexer.
+.SH SEE ALSO
+.BR gpt2codex (1)

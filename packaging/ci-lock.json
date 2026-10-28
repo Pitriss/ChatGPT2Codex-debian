@@ -1,0 +1,58 @@
+{
+  "snapshot": "20261027T000000Z",
+  "images": {
+    "debian": {
+      "image": "debian@sha256:89c1ea91e897f0fe0a3731595330bc45b8bdef4047464a07116f891a94054b31",
+      "tag_at_review": "trixie-slim",
+      "platforms": {
+        "amd64": "sha256:1e1a22175fbf1b32157ddaf0219e1db4e5401fab2b94ed285add64d18587cd2d",
+        "arm/v5": "sha256:490c1ef86813e511a5e3d223eab6df6542f28209a074f00dd388db723a8daf9a",
+        "arm/v7": "sha256:93c6fe8a2a6593f29349f2bcf2ea7976833c59a6dd215a6808f274b2fa5e67c9",
+        "arm64/v8": "sha256:1470991b497d26788dc4d6f438bf5690c6ba0d499235d237e55f4b43caea7a75",
+        "386": "sha256:54d4782cc10f415e6c52ed7873f2b7d6498a888555ee66e45ae688efc3dda6ee",
+        "ppc64le": "sha256:36d7020e168d5a85d1b1391efed8f4aa655cb01b750310f5021bd63836d36d27",
+        "riscv64": "sha256:c7834293247f8b5a554f70384d152462c9df8113a0b04958375c0e5660f0eb75",
+        "s390x": "sha256:b52f4830ac1fe39bb67a84fd3f71aa45ad7a151085cb2cc770dd5b789ba6669b"
+      }
+    },
+    "devuan": {
+      "image": "devuan/devuan@sha256:9547317f49059e8e7eb807294b4448c2be69e56030f328a3519a1b6312a32b70",
+      "tag_at_review": "excalibur",
+      "platforms": {
+        "amd64": "sha256:9547317f49059e8e7eb807294b4448c2be69e56030f328a3519a1b6312a32b70"
+      }
+    },
+    "binfmt": {
+      "image": "tonistiigi/binfmt@sha256:1b804311fe87047a4c96d38b4b3ef6f62fca8cd125265917a9e3dc3c996c39e6",
+      "tag_at_review": "qemu-v9.2.2",
+      "platforms": {
+        "amd64": "sha256:f8110364b792daf4500535f060c2146585723e620bf8a354be23655e0c07f03d",
+        "arm64": "sha256:d5d07b19bbe9750882d96e34f503373ed739bc98684dbbf24474fe9cac7d7c49",
+        "arm/v6": "sha256:fcd7f5940567d7d1b49fae59e142c0912e149490896b1a733c6b8f85ab776969",
+        "arm/v7": "sha256:ad3a9eb1a0ebb883ce71e0783d3ee30928a1c785446970550a67504455fc851f",
+        "ppc64le": "sha256:6c1fa7ab919a5b83f1b6de94bba457c19ad8f7466c5d4543276b233bc2fb939b",
+        "s390x": "sha256:eab7407c852bce57e1fc655ef5500e963a65c961d84bfef2cdf85874c5f22ef6",
+        "riscv64": "sha256:415bf2b5cad758baef413d729054282c5816295839754408e69fb3e7ad357324",
+        "386": "sha256:12f281c29115e95f1229363a4575471bead67da03fbcc91d14b407a64d1a9b7d"
+      }
+    }
+  },
+  "actions": {
+    "actions/checkout": {
+      "version": "v4.3.1",
+      "commit": "34e114876b0b11c390a56381ad16ebd13914f8d5"
+    },
+    "actions/upload-artifact": {
+      "version": "v4.6.2",
+      "commit": "ea165f8d65b6e75b540449e92b4886f43607fa02"
+    },
+    "actions/download-artifact": {
+      "version": "v4.3.0",
+      "commit": "d3f86a106a0bac45b974a628896c90dbdf5c8093"
+    },
+    "docker/setup-qemu-action": {
+      "version": "v3.6.0",
+      "commit": "29109295f81e9208d7d86ff1c6c12d2833863392"
+    }
+  }
+}

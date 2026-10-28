@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=gpt2codex
+Comment=View registered persistent Codex terminal sessions
+Exec=gpt2codex-gui
+Icon=utilities-terminal
+Terminal=false
+Categories=Development;Utility;
+StartupNotify=true

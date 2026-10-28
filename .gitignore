@@ -1,0 +1,16 @@
+/target/
+__pycache__/
+*.pyc
+/.alpha-build/
+/out/
+/artifacts/
+/release-inputs/
+/smoke/
+/debian/.debhelper/
+/debian/gpt2codex/
+/debian/debhelper-build-stamp
+/debian/files
+/debian/*.substvars
+/*.deb
+/*.buildinfo
+/*.changes

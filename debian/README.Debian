@@ -1,0 +1,16 @@
+gpt2codex alpha
+==============
+
+One package per Debian architecture; identical .deb for Debian 13 and Devuan
+Excalibur. GNU screen and git are required. tmux and Codex are not bundled.
+Konsole's runtime KPart and SVG/theme support are recommended; QTermWidget
+remains available without Konsole. Missing KPart is reported as unavailable,
+never silently described as functioning. Libraries used by both built modules
+are mandatory shlibs dependencies. No init/service manager is required.
+
+No maintainer scripts, autostart entry, service, cron, migration or registry
+modification is supplied. Upgrades/removal leave user state and running servers
+alone. Closing the GUI only disconnects its own terminal clients.
+
+See /usr/share/doc/gpt2codex/gui/README.md for GUI behavior and boundaries.
+Initial project setup is a separate explicit operator action, never installation.

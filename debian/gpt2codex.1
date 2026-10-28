@@ -1,0 +1,26 @@
+.TH GPT2CODEX 1 "October 2026" "0.1.0~alpha1"
+.SH NAME
+gpt2codex \- local project registry and persistent terminal session bridge
+.SH SYNOPSIS
+.B gpt2codex --help
+.br
+.B gpt2codex projects list
+.br
+.B gpt2codex session
+.I operation options
+.SH DESCRIPTION
+Local alpha CLI for registered projects. GNU screen is the default multiplexer;
+tmux is optional. Codex is a separate operator-provided program.
+Use --help for the full current command list.
+.SH SAFETY
+Starting a session requires an explicit local --approve-start.
+Archive approval never authorizes a new start. Unknown or changed identities
+are not adopted. Package installation does not create or control sessions.
+.SH FILES
+~/.config/chatgpt2codex/config.toml
+.br
+~/.config/chatgpt2codex/projects/
+.br
+~/.local/state/gpt2codex/
+.SH SEE ALSO
+.BR gpt2codex-gui (1), screen (1), tmux (1)

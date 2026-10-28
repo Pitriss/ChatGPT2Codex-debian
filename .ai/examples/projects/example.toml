@@ -1,0 +1,18 @@
+# Copy to ~/.config/chatgpt2codex/projects/example.toml.
+[project]
+id = "example"
+directory = "example"
+name = "Example project"
+
+# Override the default name per project, if desired:
+# [codex]
+# name = "Kóďa Example"
+
+# Override the default session naming format, if desired:
+# [sessions]
+# name_template = "{project_id}: {task}"
+# multiplexer = "screen" # default; optional alternative: "tmux"
+# Preference affects only a future explicitly approved start, never an existing session.
+
+[contexts]
+files = ["AGENTS.md", ".ai/.project_codex.md", ".ai/PROJECT_CONTEXT.md", ".ai/CODEX_RESULTS.md"]
