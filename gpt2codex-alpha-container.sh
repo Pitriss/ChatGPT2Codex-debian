@@ -43,6 +43,9 @@ PY
 elif [ "$mode" = smoke ]; then
     distro=${2:?debian or devuan}
     case "$distro" in debian|devuan) ;; *) exit 2;; esac
+    # Presence is diagnostic: a distro may select systemd for a logind
+    # alternative. It must not be a mandatory dependency of our package.
+    dpkg-query -W -f='${binary:Package}\t${db:Status-Status}\n' systemd systemd-sysv > /out/init-before.tsv 2>/dev/null || :
     apt-get update
     apt-get install -y --no-install-recommends python3 ca-certificates binutils
     deb=/input/gpt2codex_0.1.0~alpha1_amd64.deb
@@ -55,20 +58,30 @@ elif [ "$mode" = smoke ]; then
     export SCREENRC=/dev/null SYSSCREENRC=/dev/null TMPDIR=/work/tmp
     # Inert fixture records/socket. No user registry or multiplexer is mounted.
     python3 /src/gpt2codex-alpha.py sentinel --directory /work/preserved --create
+    printf 'ALPHA_SMOKE_STEP=init-dependencies\n'
+    python3 /src/gpt2codex-alpha.py inspect --deb "$deb" --arch amd64
+    # Normal APT solver constraints, simulation only: also detect transitive
+    # mandatory init dependencies. Never remove or suppress real dependencies.
+    apt-get --simulate --no-install-recommends install "$deb" systemd- systemd-sysv- > /out/no-systemd-plan.txt
     # apt resolves and verifies dependencies normally; no --force-depends.
+    printf 'ALPHA_SMOKE_STEP=install\n'
     apt-get install -y "$deb"
+    dpkg-query -W -f='${binary:Package}\t${db:Status-Status}\n' systemd systemd-sysv > /out/init-after.tsv 2>/dev/null || :
     test -z "$(dpkg --audit)"
+    printf 'ALPHA_SMOKE_STEP=self-test\n'
     python3 /src/gpt2codex-alpha.py self-test --cli /usr/bin/gpt2codex --gui /usr/bin/gpt2codex-gui
-    QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME=generic /usr/bin/gpt2codex-gui --backend-probe > /work/backend-probe.txt
-    grep -q 'konsole=1 qtermwidget=1' /work/backend-probe.txt
+    printf 'ALPHA_SMOKE_STEP=backends\n'
+    QT_QPA_PLATFORM=offscreen QT_QPA_PLATFORMTHEME=generic /usr/bin/gpt2codex-gui --backend-probe > /out/backend-probe.txt
+    grep -q 'konsole=1 qtermwidget=1' /out/backend-probe.txt
+    printf 'ALPHA_SMOKE_STEP=elf-libraries\n'
     for binary in /usr/bin/gpt2codex /usr/bin/gpt2codex-gui /usr/lib/*/gpt2codex/backends/*.so; do
-        ldd "$binary" > /work/ldd.txt
-        if grep -q 'not found' /work/ldd.txt; then exit 1; fi
+        ldd_log=/out/ldd-$(basename "$binary").txt
+        ldd "$binary" > "$ldd_log"
+        if grep -q 'not found' "$ldd_log"; then exit 1; fi
     done
-    # libsystemd0 (an ABI library) is distinct from a required init/service manager.
-    if dpkg-query -W -f='${db:Status-Status}' systemd 2>/dev/null | grep -q '^installed$'; then exit 1; fi
-    if dpkg-query -W -f='${db:Status-Status}' systemd-sysv 2>/dev/null | grep -q '^installed$'; then exit 1; fi
+    printf 'ALPHA_SMOKE_STEP=purge\n'
     apt-get purge -y gpt2codex
+    printf 'ALPHA_SMOKE_STEP=sentinels\n'
     python3 /src/gpt2codex-alpha.py sentinel --directory /work/preserved
     python3 - "$deb" "$distro" <<'PY'
 import hashlib,json,pathlib,sys

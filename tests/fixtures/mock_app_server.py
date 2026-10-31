@@ -6,6 +6,9 @@ import time
 
 MODE = sys.argv[1] if len(sys.argv) > 1 else "normal"
 THREAD_ID = "123e4567-e89b-12d3-a456-426614174000"
+# Test-only startup delay, separate from the slow thread/list response below.
+if len(sys.argv) > 2:
+    time.sleep(float(sys.argv[2]))
 
 
 def reply(payload):

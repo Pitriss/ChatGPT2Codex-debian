@@ -154,6 +154,79 @@ class AlphaTests(unittest.TestCase):
         with patch.object(alpha.subprocess,'check_output',side_effect=output):
             with self.assertRaises(AssertionError):alpha.inspect_deb(Path('fixture.deb'),'amd64')
 
+    def test_systemd_init_dependencies_refused_including_predepends_and_multiarch(self):
+        for relation in ['Depends','Pre-Depends']:
+            for package in ['systemd','systemd-sysv','systemd:any','systemd-sysv:amd64']:
+                with self.subTest(relation=relation,package=package):
+                    fields=f'Package: gpt2codex\nVersion: {alpha.VERSION}\nArchitecture: amd64\n{relation}: {package} (>= 1)\n'
+                    with patch.object(alpha.subprocess,'check_output',return_value=fields):
+                        with self.assertRaisesRegex(AssertionError,'systemd init dependency'):
+                            alpha.inspect_deb(Path('fixture.deb'),'amd64')
+
+    def smoke_fixture(self, failure='', present=True, distribution='debian'):
+        # Run the actual smoke branch with inert command fixtures. Absolute
+        # paths are redirected into this test; no installer or GUI is invoked.
+        work=self.base/('smoke-'+failure+'-'+str(present));work.mkdir()
+        for name in ['work','out','input','lib/fixture/gpt2codex/backends']:
+            (work/name).mkdir(parents=True,exist_ok=True)
+        for name in ['konsole','qtermwidget']:
+            (work/f'lib/fixture/gpt2codex/backends/{name}.so').touch()
+        (work/'os-release').write_text('VERSION_ID=13\nVERSION_CODENAME=excalibur\n')
+        body=(ROOT/'gpt2codex-alpha-container.sh').read_text().split('elif [ "$mode" = smoke ]; then\n',1)[1].rsplit('\nelse\n',1)[0]
+        for original,replacement in [('/usr/bin/gpt2codex-gui','fixture_gui'),('/etc/os-release',str(work/'os-release')),
+                                      ('/usr/lib/',str(work/'lib')+'/'),('/work/',str(work/'work')+'/'),
+                                      ('/out/',str(work/'out')+'/'),('/input/',str(work/'input')+'/'),
+                                      ('apt-get','fixture_apt_get'),('dpkg-query','fixture_dpkg_query')]:
+            body=body.replace(original,replacement)
+        fixtures=r'''
+trace() { printf '%s\n' "$*" >> "$G2C_TRACE"; }
+fixture_apt_get() {
+    trace "apt-get $*"
+    case "$*" in
+        --simulate*) test "$G2C_FAIL" != solver ;;
+        'purge -y gpt2codex') test "$G2C_FAIL" != purge ;;
+    esac
+}
+dpkg() { if test "$1" = --print-architecture; then printf 'amd64\n'; fi; }
+fixture_dpkg_query() { if test "$G2C_PRESENT" = yes; then printf 'systemd\tinstalled\nsystemd-sysv\tinstalled\n'; fi; }
+python3() {
+    trace "python3 $*"
+    case "$*" in
+        *' inspect '*) test "$G2C_FAIL" != inspect ;;
+        *' self-test '*) test "$G2C_FAIL" != self-test ;;
+        *' sentinel '*) case "$*" in *--create*) return 0;; esac; test "$G2C_FAIL" != sentinel ;;
+    esac
+}
+fixture_gui() { if test "$G2C_FAIL" = backend; then printf 'konsole=0 qtermwidget=1\n'; else printf 'konsole=1 qtermwidget=1\n'; fi; }
+ldd() { trace "ldd $*"; if test "$G2C_FAIL" = elf; then printf 'library => not found\n'; else printf 'library => fixture\n'; fi; }
+'''
+        env={**os.environ,'G2C_TRACE':str(work/'trace'),'G2C_FAIL':failure,'G2C_PRESENT':'yes' if present else 'no'}
+        cp=subprocess.run(['/bin/sh','-eu','-c',fixtures+body,'fixture','smoke',distribution],env=env,capture_output=True,text=True)
+        self.assertTrue((work/'trace').is_file(),cp.stdout+cp.stderr)
+        return cp,(work/'trace').read_text(),work
+
+    def test_smoke_allows_present_init_but_checks_dependencies_and_completes_cleanup(self):
+        for present in [True,False]:
+            with self.subTest(present=present):
+                cp,trace,work=self.smoke_fixture(present=present,distribution='debian' if present else 'devuan')
+                self.assertEqual(cp.returncode,0,cp.stdout+cp.stderr)
+                self.assertIn(' inspect --deb ',trace)
+                self.assertIn('systemd- systemd-sysv-',trace)
+                self.assertEqual(trace.count('ldd '),4)
+                self.assertIn(' self-test ',trace)
+                self.assertLess(trace.index('purge -y gpt2codex'),trace.rindex(' sentinel '))
+                self.assertTrue((work/'out/init-before.tsv').exists())
+                self.assertTrue((work/'out/init-after.tsv').exists())
+                self.assertIn('ALPHA_SMOKE_STEP=sentinels',cp.stdout)
+
+    def test_smoke_keeps_inspection_solver_backend_elf_selftest_and_cleanup_guards(self):
+        for failure in ['inspect','solver','backend','elf','self-test','purge','sentinel']:
+            with self.subTest(failure=failure):
+                cp,trace,work=self.smoke_fixture(failure=failure)
+                self.assertNotEqual(cp.returncode,0,trace)
+                if failure in ['inspect','solver']:
+                    self.assertNotIn('apt-get install -y '+str(work/'input'),trace)
+
     def test_packaging_cmake_rejects_missing_backend(self):
         cp=subprocess.run(['cmake','-S',str(ROOT/'gui'),'-B',str(self.base/'cmake'),'-DG2C_BUILD_KONSOLE=OFF','-DG2C_REQUIRE_ALL_BACKENDS=ON','-DBUILD_TESTING=OFF'],capture_output=True,text=True)
         self.assertNotEqual(cp.returncode,0)

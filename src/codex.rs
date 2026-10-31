@@ -497,8 +497,25 @@ mod tests {
 
     #[test]
     fn honors_request_deadline() {
-        let mut client = CodexClient::connect_command(mock_command("slow"), Duration::from_millis(300)).unwrap();
+        // Starting Python (especially under QEMU) is not the request under test.
+        let mut client = CodexClient::connect_command(mock_command("slow"), REQUEST_TIMEOUT).unwrap();
+        client.timeout = Duration::from_millis(300);
+        let started = Instant::now();
         let err = client.list_sessions(Path::new("/tmp/mock-project"), 10, None).unwrap_err();
         assert!(matches!(err, CodexError::Timeout));
+        assert!(started.elapsed() >= client.timeout);
+    }
+
+    #[test]
+    fn request_deadline_is_independent_of_mock_startup() {
+        let mut command = mock_command("slow");
+        // Deterministically reproduce startup longer than the request deadline.
+        command.arg("0.6");
+        let mut client = CodexClient::connect_command(command, REQUEST_TIMEOUT).unwrap();
+        client.timeout = Duration::from_millis(300);
+        let started = Instant::now();
+        let err = client.list_sessions(Path::new("/tmp/mock-project"), 10, None).unwrap_err();
+        assert!(matches!(err, CodexError::Timeout));
+        assert!(started.elapsed() >= client.timeout);
     }
 }

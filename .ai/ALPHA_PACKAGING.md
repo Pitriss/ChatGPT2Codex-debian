@@ -126,11 +126,24 @@ package carrying a false backend claim.
 Fresh pinned Debian/Devuan amd64 containers each install **the same** .deb via
 ordinary `apt-get install`, without force-depends or dependency suppression.
 They check dpkg audit, CLI help, isolated GUI self-test, actual backend-probe,
-ldd for all ELF objects, no installed systemd init, then purge gpt2codex and
+ldd for all ELF objects, no mandatory systemd init dependency, then purge gpt2codex and
 verify byte/inode/mode-preserved inert project records/socket/user sentinels.
 No user state, live sockets or real Codex is mounted. This proves inert state
 preservation, not an experiment on live user sessions; absence of maintainer
 scripts is also checked directly.
+
+The smoke test inspects the package's dependencies (including `Pre-Depends`)
+and asks the normal APT solver for a **simulated** install without `systemd`
+or `systemd-sysv`, with recommendations disabled only for this dependency check.
+A mandatory transitive dependency therefore still fails. The real install
+keeps recommendations and all backend checks; no packages are actually removed
+by the simulation. Mere presence of systemd is diagnostic, not failure:
+Debian's KDE/Polkit `default-logind | logind` alternative normally selects
+libpam-systemd, while elogind can satisfy it without systemd init. A successful
+Devuan install of the same bytes remains a separate required gate.
+`init-before.tsv`, `init-after.tsv`, `no-systemd-plan.txt`, backend-probe and
+per-ELF ldd logs are retained in the smoke artifact. `ALPHA_SMOKE_STEP` markers
+identify the stage if a silent command fails; no credentials are traced.
 
 Optional local OCI/rootfs diagnostic helpers only write under `.tmp/.log`.
 They verify image/layer digests and safe tar extraction before unprivileged

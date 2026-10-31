@@ -135,10 +135,10 @@ def licenses(destination):
 
 
 def inspect_deb(deb, expected_arch):
-    fields = subprocess.check_output(['dpkg-deb', '-f', str(deb), 'Package', 'Version', 'Architecture', 'Depends', 'Recommends', 'Suggests'], text=True)
+    fields = subprocess.check_output(['dpkg-deb', '-f', str(deb), 'Package', 'Version', 'Architecture', 'Depends', 'Pre-Depends', 'Recommends', 'Suggests'], text=True)
     assert 'Package: gpt2codex\n' in fields and 'Version: ' + VERSION + '\n' in fields
     assert 'Architecture: ' + expected_arch + '\n' in fields
-    assert not re.search(r'(?:^|[ ,|])systemd(?:-sysv)?(?:[ ,|(]|$)', fields)
+    assert not re.search(r'(?:^|[ ,|])systemd(?:-sysv)?(?::[a-z0-9-]+)?(?:[ ,|(]|$)', fields), 'systemd init dependency is forbidden'
     assert 'screen' in fields and 'Suggests: tmux' in fields and 'Recommends: konsole-kpart' in fields
     control = subprocess.check_output(['dpkg-deb', '--ctrl-tarfile', str(deb)])
     with tarfile.open(fileobj=io.BytesIO(control)) as archive:
