@@ -3,7 +3,8 @@
 Version: `0.1.0~alpha1`; future Git tag: `v0.1.0-alpha1`. Internal Cargo crate
 version remains 0.1.0. No tag, upload, release, commit, PR or branch operation
 is authorized by these files. Current observed results and blockers are in
-the private handoff; a prepared workflow is not an executed GitHub Actions run.
+the private handoff; preparing or correcting the workflow does not prove a
+successful GitHub Actions run.
 
 ## Package contract
 
@@ -44,6 +45,14 @@ QTermWidget libraries are not bundled.
 
 `packaging/ci-lock.json` fixes reviewed OCI image digests (Debian, official
 Devuan and binfmt), action commit SHAs and a dated Debian archive snapshot.
+Build APT sources include **trixie, trixie-updates and trixie-security**, with
+the same locked timestamp in the `debian` and `debian-security` archives.
+The pinned base already contains security updates: using only `trixie main`
+removed the matching development packages and caused the first hosted run's
+PCRE2 u2/u3 dependency conflict. The correction preserves image/action digests
+and the snapshot date; it neither downgrades libraries nor refreshes packages
+from moving repositories. `check-valid-until=no` applies only to frozen source
+entries, allowing historical metadata while retaining signature/hash checks.
 CI uses Debian's packaged Rust/Cargo >= 1.85, the frozen archive's packages,
 `cargo fetch --locked` then `--frozen` compilation/tests. APT verifies archive
 signatures; no trusted=yes or unauthenticated mode is used. Exact installed
@@ -130,6 +139,23 @@ switches, even outside the Codex sandbox; both attempts are **NOT VERIFIED**.
 Do not bypass APT privileges/dependency/security checks to turn this into PASS.
 Use Docker/Podman or a suitable isolated VM for a real installation check.
 These local failed probes are not CI smoke receipts.
+
+Read-only dependency verification (public OCI downloads and private APT state
+under `.tmp/.log`, no host installation or Git commands):
+
+```sh
+python3 ./gpt2codex-alpha-infra.py --apt-check --deb ABSOLUTE_EXISTING_AMD64_DEB_UNDER_PROJECT_TMP
+```
+
+This checks pinned-image package state for all three architectures with the
+actual build dependency list, reproduces the original main-only failure, and
+rejects downgrades in the corrected plans. The optional existing `.deb` is
+resolved against the unmodified Debian/Devuan runtime sources and archive keys
+from their pinned images. Both clean-install jobs intentionally retain their
+distribution's normal main/security/updates sources; build snapshot settings
+are not imposed on Devuan. Signed `apt-get update`, policies, simulated plans
+and a summary are retained. **SOLVER PASS is not a build/install/runtime PASS**
+and cannot satisfy the publication receipt gate.
 
 ## Publication gate (future separate authorization)
 

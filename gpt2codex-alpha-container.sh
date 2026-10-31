@@ -11,9 +11,11 @@ chmod 755 /usr/sbin/policy-rc.d
 if [ "$mode" = build ]; then
     test "$(. /etc/os-release; printf '%s' "$VERSION_CODENAME")" = trixie
     test "$(dpkg --print-architecture)" = "${G2C_EXPECT_ARCH:?expected CI architecture}"
-    # Immutable archive + digest-pinned base image; never refresh this in CI.
+    # Match all suites used to build the pinned image, including security fixes.
+    # Main alone can be older than installed libraries and require a downgrade.
+    # check-valid-until is scoped to frozen archives; signatures stay required.
     find /etc/apt/sources.list.d -type f -delete
-    printf 'deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/20261027T000000Z trixie main\n' > /etc/apt/sources.list
+    printf 'deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/20261027T000000Z trixie main\ndeb [check-valid-until=no] http://snapshot.debian.org/archive/debian/20261027T000000Z trixie-updates main\ndeb [check-valid-until=no] http://snapshot.debian.org/archive/debian-security/20261027T000000Z trixie-security main\n' > /etc/apt/sources.list
     apt-get update
     apt-get install -y --no-install-recommends build-essential debhelper cmake cargo rustc python3 ca-certificates git screen konsole-kpart qt6-base-dev libqtermwidget-dev libutf8proc-dev libkf6parts-dev libkf6coreaddons-dev lintian
     export HOME=/work/home XDG_STATE_HOME=/work/state XDG_CONFIG_HOME=/work/config SCREENDIR=/work/screens

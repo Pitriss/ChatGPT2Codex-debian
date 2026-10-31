@@ -16,6 +16,9 @@ ROOT = Path(__file__).resolve().parent
 spec = importlib.util.spec_from_file_location('alpha', ROOT/'gpt2codex-alpha.py')
 alpha = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(alpha)
+spec = importlib.util.spec_from_file_location('infra', ROOT/'gpt2codex-alpha-infra.py')
+infra = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(infra)
 
 
 class AlphaTests(unittest.TestCase):
@@ -165,6 +168,63 @@ class AlphaTests(unittest.TestCase):
         self.assertIn('--verify-tag --prerelease',workflow)
         self.assertIn('continue-on-error: ${{ matrix.experimental }}',workflow)
         self.assertIn('fail-fast: false',workflow)
+
+    def test_frozen_apt_includes_security_and_updates_at_locked_date(self):
+        # Regression: the base already has security libraries; main alone cannot
+        # satisfy the exact-version development dependencies without downgrades.
+        script=(ROOT/'gpt2codex-alpha-container.sh').read_text()
+        snapshot=json.loads((ROOT/'packaging/ci-lock.json').read_text())['snapshot']
+        sources=infra.build_sources(script,self.base/'apt')
+        expected=[('debian','trixie'),('debian','trixie-updates'),('debian-security','trixie-security')]
+        self.assertEqual(sources.splitlines(),[
+            f'deb [check-valid-until=no] http://snapshot.debian.org/archive/{archive}/{snapshot} {suite} main'
+            for archive,suite in expected])
+        self.assertIn('find /etc/apt/sources.list.d -type f -delete',script)
+
+    def test_all_architectures_share_build_sources_and_smoke_keeps_distro_sources(self):
+        workflow=(ROOT/'.github/workflows/alpha.yml').read_text()
+        for arch,platform in [('amd64','linux/amd64'),('arm64','linux/arm64'),('armhf','linux/arm/v7')]:
+            self.assertIn(f'arch: {arch}, platform: {platform}',workflow)
+        self.assertEqual(workflow.count('/src/gpt2codex-alpha-container.sh build'),1)
+        self.assertIn('distribution: [debian, devuan]',workflow)
+        self.assertIn('test -f input/validated/gpt2codex_0.1.0~alpha1_amd64.deb',workflow)
+        script=(ROOT/'gpt2codex-alpha-container.sh').read_text()
+        smoke=script.split('elif [ "$mode" = smoke ]; then',1)[1]
+        self.assertNotIn('/etc/apt',smoke)
+        self.assertNotIn('snapshot.debian.org',smoke)
+        self.assertIn('apt-get install -y "$deb"',smoke)
+        # Check executable statements rather than explanatory comments.
+        commands='\n'.join(line for line in script.splitlines() if not line.lstrip().startswith('#'))
+        for unsafe in ['trusted=yes','allow-unauthenticated','allow-insecure-repositories',
+                       'AllowInsecureRepositories','AllowUnauthenticated','--allow-downgrades',
+                       '--force-depends','Check-Valid-Until "false"']:
+            self.assertNotIn(unsafe,commands)
+
+    def test_oci_apt_reader_checks_layer_hash_and_reads_regular_key_not_alias(self):
+        archive=io.BytesIO()
+        with tarfile.open(fileobj=archive,mode='w') as tar:
+            for name,data in {'var/lib/dpkg/status':b'public package status',
+                              'etc/apt/sources.list.d/../../../outside':b'path traversal fixture',
+                              'usr/share/keyrings/devuan-archive-keyring.pgp':b'public key fixture'}.items():
+                member=tarfile.TarInfo(name);member.size=len(data);tar.addfile(member,io.BytesIO(data))
+            alias=tarfile.TarInfo('usr/share/keyrings/devuan-archive-keyring.gpg')
+            alias.type=tarfile.SYMTYPE;alias.linkname='devuan-archive-keyring.pgp';tar.addfile(alias)
+        layer=archive.getvalue()
+        config=b'{"os":"linux","architecture":"amd64"}'
+        digest=lambda data:'sha256:'+hashlib.sha256(data).hexdigest()
+        manifest=json.dumps({'config':{'digest':digest(config)},'layers':[{'digest':digest(layer)}]}).encode()
+        image=digest(manifest)
+        lock={'images':{'devuan':{'image':'devuan/devuan@'+image}}}
+        responses={'https://auth.docker.io/token?service=registry.docker.io&scope=repository%3Adevuan%2Fdevuan%3Apull':b'{"token":"anonymous fixture"}'}
+        base='https://registry-1.docker.io/v2/devuan/devuan/'
+        responses.update({base+'manifests/'+image:manifest,base+'blobs/'+digest(config):config,base+'blobs/'+digest(layer):layer})
+        with patch.object(infra,'get',side_effect=lambda url,*args:responses[url]):
+            files=infra.image_apt_state(lock,'devuan','amd64')
+            self.assertEqual(files['usr/share/keyrings/devuan-archive-keyring.pgp'],b'public key fixture')
+            self.assertNotIn('usr/share/keyrings/devuan-archive-keyring.gpg',files)
+            self.assertNotIn('etc/apt/sources.list.d/../../../outside',files)
+            responses[base+'blobs/'+digest(layer)]=b'tampered layer'
+            with self.assertRaises(AssertionError):infra.image_apt_state(lock,'devuan','amd64')
 
 
 if __name__=='__main__':unittest.main(verbosity=2)
