@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import tarfile
 import tempfile
@@ -163,6 +164,36 @@ class AlphaTests(unittest.TestCase):
                     with patch.object(alpha.subprocess,'check_output',return_value=fields):
                         with self.assertRaisesRegex(AssertionError,'systemd init dependency'):
                             alpha.inspect_deb(Path('fixture.deb'),'amd64')
+
+    def test_inspection_uses_isolated_tmpdir_without_source_tmp(self):
+        source=self.base/'src';source.mkdir()
+        scratch=self.base/'work/tmp';scratch.mkdir(parents=True)
+        package=self.base/'package'
+        (package/'DEBIAN').mkdir(parents=True)
+        arch=subprocess.check_output(['dpkg','--print-architecture'],text=True).strip()
+        (package/'DEBIAN/control').write_text(
+            f'Package: gpt2codex\nVersion: {alpha.VERSION}\nArchitecture: {arch}\n'
+            'Maintainer: Synthetic fixture\nDescription: inert inspection fixture\n'
+            'Depends: screen\nRecommends: konsole-kpart\nSuggests: tmux\n')
+        # Native ELF fixtures exercise the real inspector without starting any
+        # program or requiring a previously built application package.
+        for name in ['usr/bin/gpt2codex','usr/bin/gpt2codex-gui',
+                     'usr/lib/fixture/gpt2codex/backends/libgpt2codex-backend-konsole.so',
+                     'usr/lib/fixture/gpt2codex/backends/libgpt2codex-backend-qtermwidget.so']:
+            target=package/name;target.parent.mkdir(parents=True,exist_ok=True)
+            shutil.copyfile('/bin/true',target)
+        for name,data in {'usr/share/gpt2codex/backends.json':'{"konsole":true,"qtermwidget":true}',
+                          'usr/share/doc/gpt2codex/cargo-licenses/versions.json':'[]'}.items():
+            target=package/name;target.parent.mkdir(parents=True,exist_ok=True);target.write_text(data)
+        deb=self.base/'fixture.deb'
+        subprocess.run(['dpkg-deb','--build','--root-owner-group',str(package),str(deb)],check=True,capture_output=True)
+        with patch.object(alpha,'ROOT',source),patch.dict(os.environ,{'TMPDIR':str(scratch)}),patch.object(alpha,'run',wraps=alpha.run) as extract:
+            alpha.inspect_deb(deb,arch)
+        unpacked=Path(extract.call_args.args[0][-1])
+        self.assertEqual(unpacked.parent,scratch)
+        self.assertFalse(unpacked.exists())
+        self.assertFalse((source/'.tmp').exists())
+        self.assertEqual(list(source.iterdir()),[])
 
     def smoke_fixture(self, failure='', present=True, distribution='debian'):
         # Run the actual smoke branch with inert command fixtures. Absolute

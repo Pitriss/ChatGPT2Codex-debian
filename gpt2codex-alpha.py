@@ -144,7 +144,8 @@ def inspect_deb(deb, expected_arch):
     with tarfile.open(fileobj=io.BytesIO(control)) as archive:
         names = {p.name.removeprefix('./') for p in archive}
         assert not names.intersection({'preinst','postinst','prerm','postrm','config'}), names
-    with tempfile.TemporaryDirectory(prefix='alpha-inspect-', dir=ROOT / '.tmp') as temp:
+    temp_parent = Path(os.environ.get('TMPDIR', ROOT / '.tmp'))
+    with tempfile.TemporaryDirectory(prefix='alpha-inspect-', dir=temp_parent) as temp:
         run(['dpkg-deb', '-x', deb, temp])
         unpacked = Path(temp)
         modules = sorted(unpacked.glob('usr/lib/*/gpt2codex/backends/*.so'))
