@@ -15,7 +15,7 @@ The reviewed synthetic-redaction-header exceptions are pinned to complete
 file hashes; no credentials are exempted by path. Automated heuristic scanning
 is useful evidence, not a mathematical proof of secret absence.
 
-Count: **85 files**.
+Count: **87 files**.
 
 - `.ai/ALPHA_COMMIT_FILES.md`
 - `.ai/ALPHA_PACKAGING.md`
@@ -70,6 +70,8 @@ Count: **85 files**.
 - `gpt2codex-alpha-rootfs-test.py`
 - `gpt2codex-alpha-test.py`
 - `gpt2codex-alpha.py`
+- `gpt2codex-ci-test.py`
+- `gpt2codex-ci.py`
 - `gpt2codex-multiplexer-test.py`
 - `gpt2codex-p0ic-qt6-test-v2.sh`
 - `gpt2codex-project-icons-test.py`

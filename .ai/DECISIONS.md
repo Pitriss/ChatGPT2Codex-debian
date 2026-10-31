@@ -1,5 +1,25 @@
 # Decisions and open verification items
 
+## Approved alpha CI optimization (2026-10-31)
+
+- Quick Rust, light packaging and syntax/static checks run on every push/PR.
+  Complete Debian amd64 builds/smokes run for relevant changes, unknown change
+  detection, the existing release tag and manual full CI. Docs-only changes
+  use the quick lane. No tests are removed; Qt/CMake tests stay in full CI.
+- ARM64/ARMHF run on release/manual full CI, experimentally and independently.
+- `run_devuan` defaults false. Devuan install evidence is optional and
+  non-blocking; invalid/failed evidence cannot claim compatibility PASS.
+  This supersedes the original mandatory two-distribution receipt rule below.
+- A release still needs complete amd64/backend evidence and one Debian smoke
+  receipt for the exact package SHA, strict artifact validation and the
+  existing publication variable, exact tag and alpha-release environment.
+- Cache only Cargo archives, on trusted default-branch push/manual jobs;
+  PR and tag release jobs do not restore/save cache. Never cache credentials,
+  config, extracted sources, build scripts or compiled targets. Cache problems
+  must permit a cold locked fetch. Existing image/snapshot pins remain fixed.
+- No local Docker/Podman dependency or custom image, application/lifecycle
+  changes, Git operations or publication are authorized by this implementation.
+
 ## Approved alpha preparation (2026-10-28)
 
 - One `gpt2codex` Debian `0.1.0~alpha1` package per amd64/arm64/armhf, shared

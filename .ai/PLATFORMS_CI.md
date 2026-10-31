@@ -4,9 +4,13 @@
 
 Current package version `0.1.0~alpha1`; workflow `.github/workflows/alpha.yml`.
 All builds use Debian 13: amd64 blocking, arm64/armhf experimental with
-fail-fast=false and continue-on-error. One package per architecture is shared
-with Devuan Excalibur. Both clean amd64 runtime installs gate future release;
-there is no Devuan-specific rebuild. ARM runtime compatibility remains unverified.
+fail-fast=false and continue-on-error. Quick checks run on each push/PR;
+full amd64 CI runs for relevant changes or uncertain detection. Release/manual
+full runs also request both ARM builds. One package per architecture is shared
+with Devuan Excalibur. The Debian amd64 smoke gates future release; optional
+Devuan `run_devuan=false` smoke is non-blocking. There is no Devuan-specific
+rebuild. This is the approved 2026-10-31 optimization; previous CI #5 passed
+all builds and both smokes, but this new workflow is not yet a passed hosted run.
 
 Build inputs are frozen in `packaging/ci-lock.json` and Cargo.lock, with actual
 package versions retained in `.buildinfo`/architecture evidence. Both backend
@@ -23,7 +27,7 @@ See [packaging and release gates](ALPHA_PACKAGING.md) for commands and limitatio
 | Debian 13 (Trixie) | amd64 | Main / release-blocking | Must pass |
 | Debian 13 (Trixie) | armhf (ARMv7) | Experimental | Non-blocking |
 | Debian 13 (Trixie) | arm64 | Experimental | Non-blocking |
-| Devuan 6 (Excalibur) | amd64 | Shared-package compatibility | Blocking install smoke before alpha publication |
+| Devuan 6 (Excalibur) | amd64 | Shared-package compatibility | Optional manual install smoke, non-blocking |
 | Devuan 6 (Excalibur) | armhf (ARMv7) | Experimental | Non-blocking |
 | Devuan 6 (Excalibur) | arm64 | Experimental | Non-blocking |
 

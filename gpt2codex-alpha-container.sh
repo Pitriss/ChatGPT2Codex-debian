@@ -3,12 +3,12 @@
 set -eu
 test -f /.dockerenv || test -f /.gpt2codex-alpha-isolated || { echo 'Refusing non-isolated environment'; exit 2; }
 test "${G2C_ALPHA_CONTAINER:-}" = 1 || exit 2
-mode=${1:?build or smoke}
+mode=${1:?build, quick or smoke}
 export DEBIAN_FRONTEND=noninteractive LC_ALL=C.UTF-8 LANG=C.UTF-8
 mkdir -p /work/tmp /work/home /work/state /work/config /work/screens /out
 printf '#!/bin/sh\nexit 101\n' > /usr/sbin/policy-rc.d
 chmod 755 /usr/sbin/policy-rc.d
-if [ "$mode" = build ]; then
+if [ "$mode" = build ] || [ "$mode" = quick ]; then
     test "$(. /etc/os-release; printf '%s' "$VERSION_CODENAME")" = trixie
     test "$(dpkg --print-architecture)" = "${G2C_EXPECT_ARCH:?expected CI architecture}"
     # Match all suites used to build the pinned image, including security fixes.
@@ -17,18 +17,32 @@ if [ "$mode" = build ]; then
     find /etc/apt/sources.list.d -type f -delete
     printf 'deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/20261027T000000Z trixie main\ndeb [check-valid-until=no] http://snapshot.debian.org/archive/debian/20261027T000000Z trixie-updates main\ndeb [check-valid-until=no] http://snapshot.debian.org/archive/debian-security/20261027T000000Z trixie-security main\n' > /etc/apt/sources.list
     apt-get update
-    apt-get install -y --no-install-recommends build-essential debhelper cmake cargo rustc python3 ca-certificates git screen konsole-kpart qt6-base-dev libqtermwidget-dev libutf8proc-dev libkf6parts-dev libkf6coreaddons-dev lintian
+    if [ "$mode" = build ]; then
+        apt-get install -y --no-install-recommends build-essential debhelper cmake cargo rustc python3 ca-certificates git screen konsole-kpart qt6-base-dev libqtermwidget-dev libutf8proc-dev libkf6parts-dev libkf6coreaddons-dev lintian
+    else
+        apt-get install -y --no-install-recommends build-essential cargo rustc python3 ca-certificates git screen binutils yamllint
+    fi
     export HOME=/work/home XDG_STATE_HOME=/work/state XDG_CONFIG_HOME=/work/config SCREENDIR=/work/screens
     export SCREENRC=/dev/null SYSSCREENRC=/dev/null TMPDIR=/work/tmp CARGO_HOME=/work/cargo
     python3 /src/gpt2codex-alpha.py stage --destination /work/src
     cd /work/src
     python3 -c 'import json; assert json.load(open("packaging/ci-lock.json"))["snapshot"] == "20261027T000000Z"'
-    cargo fetch --locked
+    python3 ./gpt2codex-ci.py fetch-cargo --cargo-home /work/cargo --cache /cargo-cache
+    if [ "$mode" = quick ]; then
+        cargo test --frozen --all-targets
+        python3 ./gpt2codex-alpha-test.py --light
+        python3 ./gpt2codex-ci-test.py
+        python3 ./gpt2codex-ci.py actionlint --destination /work/actionlint
+        python3 ./gpt2codex-ci.py static --actionlint /work/actionlint/actionlint
+        printf '{"scope":"quick","status":"PASS","release_validated":false}\n' > /out/quick.json
+        exit 0
+    fi
     dpkg-buildpackage -b -us -uc
     arch=$(dpkg --print-architecture)
     deb=/work/gpt2codex_0.1.0~alpha1_${arch}.deb
     python3 ./gpt2codex-alpha.py inspect --deb "$deb" --arch "$arch"
     python3 ./gpt2codex-alpha-test.py
+    python3 ./gpt2codex-ci-test.py
     sh -n ./gpt2codex-alpha-container.sh
     lintian --fail-on error "$deb"
     mkdir -p /out/validated

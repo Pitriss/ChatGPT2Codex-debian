@@ -1,9 +1,19 @@
 # Project context
 
+The approved 2026-10-31 CI optimization separates always-on quick checks from
+conditional full Debian amd64 CI. Release tags and manual full runs also build
+experimental arm64/armhf. Devuan remains supported with optional non-blocking
+`run_devuan=false` smoke; the mandatory release receipt is Debian for the same
+complete amd64 bytes. Trusted default-branch jobs may cache Cargo archives;
+PR and release-tag jobs use cold dependency fetches. CI #5 at `27473ca`
+passed the previous full matrix and both smokes; the optimized workflow still
+needs its own hosted verification. See [packaging](ALPHA_PACKAGING.md).
+
 The approved 2026-10-28 alpha phase prepares Debian packaging
 `0.1.0~alpha1` and pinned Debian 13 GitHub Actions builds for amd64 (required),
-arm64/armhf (experimental). Clean Debian/Devuan amd64 installation receipts
-gate any future publication. No publication, tag, commit or remote setting
+arm64/armhf (experimental). Clean Debian amd64 installation evidence gates
+publication; Devuan evidence is optional under the newer approval above.
+No publication, tag, commit or remote setting
 change is authorized. See [packaging](ALPHA_PACKAGING.md),
 [first-commit inventory](ALPHA_COMMIT_FILES.md) and the private handoff for
 actual local results and blockers; prepared CI is not a passed hosted run.

@@ -21,6 +21,7 @@ AI_DOCS = {'README.md','PROJECT_CONTEXT.md','SECURITY.md','WORKFLOW.md','ARCHITE
            'P0_K2_RULES_MIGRATION.md','P0H_MCP_READONLY.md','P0I_SCREEN_QT6_DESIGN.md','P0J_READONLY_APP_SERVER.md',
            'TMUX_COMPARISON.md','TMUX_LIFECYCLE.md','ALPHA_PACKAGING.md','ALPHA_COMMIT_FILES.md'}
 HELPERS = ['gpt2codex-alpha.py', 'gpt2codex-alpha-infra.py', 'gpt2codex-alpha-container.sh',
+           'gpt2codex-ci.py', 'gpt2codex-ci-test.py',
            'gpt2codex-alpha-rootfs-test.py',
            'gpt2codex-alpha-test.py', 'gpt2codex-project-icons-test.py', 'gpt2codex-multiplexer-test.py',
            'gpt2codex-terminal-diagnostics.py', 'gpt2codex-p0ic-qt6-test-v2.sh']
@@ -196,8 +197,9 @@ def release_index(artifacts, destination):
         try:
             reports = list(artifacts.rglob('result-'+arch+'.json'))
             assert len(reports) <= 1, 'ambiguous build report'
-            report = json.loads(reports[0].read_text()) if reports else {'status':'NOT VERIFIED','backends':{}}
+            report = json.loads(reports[0].read_text()) if reports else {'status':'NOT RUN','backends':{}}
             if report['status'] == 'PASS':
+                assert report['backends']=={'konsole':'built-and-tested','qtermwidget':'built-and-tested'}, 'incomplete backend evidence'
                 packages = list(artifacts.rglob('gpt2codex_'+VERSION+'_'+arch+'.deb'))
                 assert len(packages) == 1 and packages[0].name == report['package']
                 digest = hashlib.sha256(packages[0].read_bytes()).hexdigest()
@@ -215,13 +217,22 @@ def release_index(artifacts, destination):
             report={'status':'FAIL (artifact/report validation)','backends':{'validation':'invalid experimental input excluded'}}
         rows.append('| '+arch+' | '+report['status']+' | '+json.dumps(report.get('backends',{}),sort_keys=True)+' |')
     assert 'amd64' in accepted, 'mandatory amd64 not validated'
-    for distro in ['debian','devuan']:
-        reports = list(artifacts.rglob('smoke-'+distro+'.json'))
-        assert len(reports) == 1, 'missing clean installation result: '+distro
-        report = json.loads(reports[0].read_text())
-        assert report['status'] == 'PASS' and report['sha256'] == accepted['amd64']
+    reports = list(artifacts.rglob('smoke-debian.json'))
+    assert len(reports) == 1, 'missing or duplicate clean installation result: debian'
+    report = json.loads(reports[0].read_text())
+    assert report['status'] == 'PASS' and report['sha256'] == accepted['amd64']
+    devuan='NOT RUN'
+    reports=list(artifacts.rglob('smoke-devuan.json'))
+    if reports:
+        try:
+            assert len(reports)==1
+            report=json.loads(reports[0].read_text())
+            assert report['status']=='PASS' and report['sha256']==accepted['amd64']
+            devuan='PASS'
+        except (AssertionError,KeyError,TypeError,ValueError,OSError):
+            devuan='FAIL (optional receipt invalid, failed or ambiguous)'
     (destination/'SHA256SUMS').write_text('\n'.join(sums)+'\n')
-    (destination/'ARCHITECTURES.md').write_text('# Alpha 0.1.0~alpha1\n\n| Architecture | Result | Backends |\n|---|---|---|\n'+'\n'.join(rows)+'\n\nThe same amd64 .deb passed clean Debian 13 and Devuan Excalibur install/remove smoke tests.\nARM builds remain experimental. No automatic Codex/session recovery.\n')
+    (destination/'ARCHITECTURES.md').write_text('# Alpha 0.1.0~alpha1\n\n| Architecture | Result | Backends |\n|---|---|---|\n'+'\n'.join(rows)+'\n\nThe same amd64 .deb passed the mandatory Debian 13 install/remove smoke test.\nDevuan Excalibur (optional): '+devuan+'.\nARM builds remain experimental; absent evidence means NOT RUN. No automatic Codex/session recovery.\n')
 
 
 def local_build(allow_unmanaged_toolchain):

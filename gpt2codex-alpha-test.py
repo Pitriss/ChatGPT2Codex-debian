@@ -9,6 +9,7 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+import sys
 import tarfile
 import tempfile
 import unittest
@@ -118,17 +119,46 @@ class AlphaTests(unittest.TestCase):
             self.assertEqual(len(list(destination.glob('*.deb'))),1)
             self.assertIn('FAIL (artifact/report validation)',(destination/'ARCHITECTURES.md').read_text())
 
-    def test_release_requires_both_clean_install_receipts(self):
-        artifacts=self.release_fixture();(artifacts/'smoke-devuan.json').unlink()
+    def test_release_requires_debian_clean_install_receipt(self):
+        artifacts=self.release_fixture();(artifacts/'smoke-debian.json').unlink()
         with patch.object(alpha,'inspect_deb'):
-            with self.assertRaisesRegex(AssertionError,'missing clean installation'):
+            with self.assertRaisesRegex(AssertionError,'clean installation'):
                 alpha.release_index(artifacts,self.base/'release')
 
     def test_smoke_receipt_must_match_exact_same_deb(self):
         artifacts=self.release_fixture()
-        (artifacts/'smoke-devuan.json').write_text(json.dumps({'status':'PASS','sha256':'wrong'}))
+        (artifacts/'smoke-debian.json').write_text(json.dumps({'status':'PASS','sha256':'wrong'}))
         with patch.object(alpha,'inspect_deb'):
             with self.assertRaises(AssertionError):alpha.release_index(artifacts,self.base/'release')
+
+    def test_optional_devuan_absence_failure_and_invalid_receipts_do_not_block_debian(self):
+        artifacts=self.release_fixture();devuan=artifacts/'smoke-devuan.json'
+        variants=[None,{'status':'FAIL'}, {'status':'PASS','sha256':'stale'}, [], 'invalid json']
+        for i,value in enumerate(variants):
+            if value is None:devuan.unlink()
+            else:devuan.write_text(value if isinstance(value,str) else json.dumps(value))
+            destination=self.base/('optional-'+str(i))
+            with patch.object(alpha,'inspect_deb'):alpha.release_index(artifacts,destination)
+            text=(destination/'ARCHITECTURES.md').read_text()
+            self.assertIn('Devuan Excalibur (optional): '+('NOT RUN' if value is None else 'FAIL'),text)
+            self.assertEqual(len(list(destination.glob('*.deb'))),1)
+
+    def test_duplicate_debian_receipt_refused(self):
+        artifacts=self.release_fixture();(artifacts/'duplicate').mkdir()
+        (artifacts/'duplicate/smoke-debian.json').write_bytes((artifacts/'smoke-debian.json').read_bytes())
+        with patch.object(alpha,'inspect_deb'):
+            with self.assertRaisesRegex(AssertionError,'duplicate'):alpha.release_index(artifacts,self.base/'release')
+
+    def test_duplicate_devuan_receipt_is_reported_invalid_without_claiming_pass(self):
+        artifacts=self.release_fixture();(artifacts/'duplicate').mkdir()
+        (artifacts/'duplicate/smoke-devuan.json').write_bytes((artifacts/'smoke-devuan.json').read_bytes())
+        with patch.object(alpha,'inspect_deb'):alpha.release_index(artifacts,self.base/'release')
+        self.assertIn('Devuan Excalibur (optional): FAIL',(self.base/'release/ARCHITECTURES.md').read_text())
+
+    def test_incomplete_backend_evidence_refused(self):
+        artifacts=self.release_fixture();p=artifacts/'result-amd64.json';data=json.loads(p.read_text())
+        data['backends']['konsole']='not built';p.write_text(json.dumps(data))
+        with self.assertRaisesRegex(AssertionError,'backend evidence'):alpha.release_index(artifacts,self.base/'release')
 
     def test_package_checksum_change_refused(self):
         artifacts=self.release_fixture()
@@ -281,7 +311,10 @@ ldd() { trace "ldd $*"; if test "$G2C_FAIL" = elf; then printf 'library => not f
     def test_action_pins_and_default_publication_gate(self):
         lock=json.loads((ROOT/'packaging/ci-lock.json').read_text())
         workflow=(ROOT/'.github/workflows/alpha.yml').read_text()
-        for repo,value in lock['actions'].items():self.assertIn(repo+'@'+value['commit'],workflow)
+        for repo,value in lock['actions'].items():
+            if repo=='actions/cache':
+                for operation in ['restore','save']:self.assertIn(repo+'/'+operation+'@'+value['commit'],workflow)
+            else:self.assertIn(repo+'@'+value['commit'],workflow)
         self.assertIn("vars.ALPHA_PUBLISH_ENABLED == 'true'",workflow)
         self.assertIn('environment: alpha-release',workflow)
         self.assertIn('--verify-tag --prerelease',workflow)
@@ -302,10 +335,9 @@ ldd() { trace "ldd $*"; if test "$G2C_FAIL" = elf; then printf 'library => not f
 
     def test_all_architectures_share_build_sources_and_smoke_keeps_distro_sources(self):
         workflow=(ROOT/'.github/workflows/alpha.yml').read_text()
-        for arch,platform in [('amd64','linux/amd64'),('arm64','linux/arm64'),('armhf','linux/arm/v7')]:
-            self.assertIn(f'arch: {arch}, platform: {platform}',workflow)
+        self.assertIn('matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}',workflow)
         self.assertEqual(workflow.count('/src/gpt2codex-alpha-container.sh build'),1)
-        self.assertIn('distribution: [debian, devuan]',workflow)
+        for distro in ['debian','devuan']:self.assertIn(' smoke '+distro,workflow)
         self.assertIn('test -f input/validated/gpt2codex_0.1.0~alpha1_amd64.deb',workflow)
         script=(ROOT/'gpt2codex-alpha-container.sh').read_text()
         smoke=script.split('elif [ "$mode" = smoke ]; then',1)[1]
@@ -346,4 +378,16 @@ ldd() { trace "ldd $*"; if test "$G2C_FAIL" = elf; then printf 'library => not f
             with self.assertRaises(AssertionError):infra.image_apt_state(lock,'devuan','amd64')
 
 
-if __name__=='__main__':unittest.main(verbosity=2)
+def packaging_suite(light=False):
+    names=unittest.defaultTestLoader.getTestCaseNames(AlphaTests)
+    # Full invocation retains every test. Qt/CMake coverage runs in full CI.
+    return unittest.TestSuite(AlphaTests(name) for name in names
+                              if not light or name!='test_packaging_cmake_rejects_missing_backend')
+
+
+if __name__=='__main__':
+    if sys.argv[1:]==['--light']:
+        print('PACKAGING_SCOPE=light; Qt/CMake coverage belongs to full CI',flush=True)
+        sys.exit(not unittest.TextTestRunner(verbosity=2).run(packaging_suite(light=True)).wasSuccessful())
+    else:
+        unittest.main(verbosity=2)

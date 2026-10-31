@@ -291,7 +291,7 @@ def main():
         print(key, images[key]['image'], sorted(platforms))
     actions = {}
     for repo, version in [('actions/checkout','v4.3.1'), ('actions/upload-artifact','v4.6.2'),
-                          ('actions/download-artifact','v4.3.0'), ('docker/setup-qemu-action','v3.6.0')]:
+                          ('actions/download-artifact','v4.3.0'), ('docker/setup-qemu-action','v3.6.0'), ('actions/cache','v4.3.0')]:
         ref = json.loads(get(f'https://api.github.com/repos/{repo}/git/ref/tags/{version}', {'Accept':'application/vnd.github+json'}))['object']
         if ref['type'] == 'tag':
             ref = json.loads(get(ref['url']))['object']
@@ -301,7 +301,9 @@ def main():
     Path('packaging').mkdir(exist_ok=True)
     release = get('https://snapshot.debian.org/archive/debian/20261027T000000Z/dists/trixie/Release')
     assert b'Codename: trixie\n' in release
-    Path('packaging/ci-lock.json').write_text(json.dumps({'snapshot': '20261027T000000Z', 'images': images, 'actions': actions}, indent=2) + '\n')
+    # Binary-tool checksums are separately reviewed, not refreshed from latest.
+    tools=json.loads(Path('packaging/ci-lock.json').read_text())['tools']
+    Path('packaging/ci-lock.json').write_text(json.dumps({'snapshot': '20261027T000000Z', 'images': images, 'actions': actions, 'tools':tools}, indent=2) + '\n')
 
 
 if __name__ == '__main__':
