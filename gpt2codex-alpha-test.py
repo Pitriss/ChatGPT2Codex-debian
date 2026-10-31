@@ -6,6 +6,7 @@ import io
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import tarfile
 import tempfile
@@ -173,11 +174,12 @@ class AlphaTests(unittest.TestCase):
             (work/f'lib/fixture/gpt2codex/backends/{name}.so').touch()
         (work/'os-release').write_text('VERSION_ID=13\nVERSION_CODENAME=excalibur\n')
         body=(ROOT/'gpt2codex-alpha-container.sh').read_text().split('elif [ "$mode" = smoke ]; then\n',1)[1].rsplit('\nelse\n',1)[0]
-        for original,replacement in [('/usr/bin/gpt2codex-gui','fixture_gui'),('/etc/os-release',str(work/'os-release')),
-                                      ('/usr/lib/',str(work/'lib')+'/'),('/work/',str(work/'work')+'/'),
-                                      ('/out/',str(work/'out')+'/'),('/input/',str(work/'input')+'/'),
-                                      ('apt-get','fixture_apt_get'),('dpkg-query','fixture_dpkg_query')]:
-            body=body.replace(original,replacement)
+        replacements={'/usr/bin/gpt2codex-gui':'fixture_gui','/etc/os-release':str(work/'os-release'),
+                      '/usr/lib/':str(work/'lib')+'/','/work/':str(work/'work')+'/',
+                      '/out/':str(work/'out')+'/','/input/':str(work/'input')+'/',
+                      'apt-get':'fixture_apt_get','dpkg-query':'fixture_dpkg_query'}
+        # Substitute only matches in the original script, never inserted paths.
+        body=re.sub('|'.join(map(re.escape,replacements)),lambda match:replacements[match.group(0)],body)
         fixtures=r'''
 trace() { printf '%s\n' "$*" >> "$G2C_TRACE"; }
 fixture_apt_get() {
@@ -226,6 +228,19 @@ ldd() { trace "ldd $*"; if test "$G2C_FAIL" = elf; then printf 'library => not f
                 self.assertNotEqual(cp.returncode,0,trace)
                 if failure in ['inspect','solver']:
                     self.assertNotIn('apt-get install -y '+str(work/'input'),trace)
+
+    def test_smoke_rewrites_original_paths_only_in_ci_shaped_directory(self):
+        # CI stages sources under /work/src. Inserted fixture paths must not
+        # themselves match subsequent /work/, /out/ or /input/ substitutions.
+        directory=self.base/'work/src/out/input'
+        directory.mkdir(parents=True)
+        with patch.object(self,'base',directory):
+            for present in [True,False]:
+                with self.subTest(present=present):
+                    cp,trace,work=self.smoke_fixture(present=present,distribution='debian' if present else 'devuan')
+                    self.assertEqual(cp.returncode,0,cp.stdout+cp.stderr)
+                    self.assertIn('ALPHA_SMOKE_STEP=sentinels',cp.stdout)
+                    self.assertIn('apt-get purge -y gpt2codex',trace)
 
     def test_packaging_cmake_rejects_missing_backend(self):
         cp=subprocess.run(['cmake','-S',str(ROOT/'gui'),'-B',str(self.base/'cmake'),'-DG2C_BUILD_KONSOLE=OFF','-DG2C_REQUIRE_ALL_BACKENDS=ON','-DBUILD_TESTING=OFF'],capture_output=True,text=True)
